@@ -24,9 +24,9 @@
         取消申请
       </el-button>
     </template>
-    <!-- 地块已被认养/待释放且本人无有效申请时可申请候补 -->
+    <!-- 地块已被认养/待释放、非本人地块且本人无有效申请时可申请候补 -->
     <el-button
-      v-else-if="canApply && loggedIn"
+      v-else-if="canApply && loggedIn && !isOwner"
       type="warning" plain size="small" @click="$emit('apply', plotId)"
     >
       申请候补
@@ -46,6 +46,7 @@ const props = defineProps<{
   status?: MyWaitlistStatus
   canViewList: boolean
   loggedIn?: boolean
+  isOwner?: boolean
 }>()
 
 defineEmits<{

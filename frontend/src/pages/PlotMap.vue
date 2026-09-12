@@ -46,6 +46,7 @@
             :status="waitStore.statusByPlot[row.id]"
             :can-view-list="role === 'admin' || row.adopter_id === user?.id"
             :logged-in="isLoggedIn"
+            :is-owner="row.adopter_id === user?.id"
             @apply="onApply"
             @cancel="onCancel"
             @adopt="onInvitedAdopt"

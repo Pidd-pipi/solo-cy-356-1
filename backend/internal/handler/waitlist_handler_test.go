@@ -149,6 +149,11 @@ func TestWaitlistAPI_FullFlow(t *testing.T) {
 		t.Fatalf("anonymous apply status=%d, want 401", code)
 	}
 
+	// 1b. 当前认养人不能申请自己地块的候补（409）
+	if code, body := f.do(t, "POST", fmt.Sprintf("/api/v1/plots/%d/waitlist", f.plotID), ownerToken, nil); code != http.StatusConflict {
+		t.Fatalf("owner apply own plot status=%d body=%v, want 409", code, body)
+	}
+
 	// 2. 申请候补成功
 	code, body := f.do(t, "POST", fmt.Sprintf("/api/v1/plots/%d/waitlist", f.plotID), appToken, map[string]string{"note": "草莓"})
 	if code != http.StatusOK {
