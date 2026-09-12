@@ -14,6 +14,15 @@ export const PlotStatusMeta: Record<string, { label: string; type: 'success' | '
   harvested: { label: '待释放', type: 'info' }
 }
 
+// 候补认养申请状态（与后端 WaitlistStatus 对应）
+export type WaitlistStatus = 'waiting' | 'invited' | 'adopted' | 'cancelled'
+export const WaitlistStatusMeta: Record<string, { label: string; type: 'success' | 'warning' | 'info' | 'danger' | 'primary' }> = {
+  waiting: { label: '候补中', type: 'warning' },
+  invited: { label: '已获优先认养资格', type: 'danger' },
+  adopted: { label: '已通过候补认养', type: 'success' },
+  cancelled: { label: '已取消', type: 'info' }
+}
+
 export type PlanStatus = 'planned' | 'planting' | 'growing' | 'harvesting' | 'completed'
 export const PlanStatusMeta: Record<string, { label: string; type: 'success' | 'warning' | 'info' | 'danger' | 'primary' }> = {
   planned: { label: '已计划', type: 'info' },

@@ -55,6 +55,7 @@ func main() {
 	// 仓储
 	userRepo := repository.NewUserRepository(db)
 	plotRepo := repository.NewPlotRepository(db)
+	waitlistRepo := repository.NewWaitlistRepository(db)
 	planRepo := repository.NewPlantingPlanRepository(db)
 	harvestRepo := repository.NewHarvestRecordRepository(db)
 	diaryRepo := repository.NewDiaryRepository(db)
@@ -65,6 +66,9 @@ func main() {
 	authService := service.NewAuthService(userRepo, logger, cfg.JWTSecret, cfg.JWTExpireHours)
 	userService := service.NewUserService(userRepo, logger)
 	plotService := service.NewPlotService(plotRepo, db, logger)
+	waitlistService := service.NewWaitlistService(waitlistRepo, plotRepo, db, logger)
+	// 候补认养钩子注入：释放即邀请最早候补者、认养即兑现受邀资格（避免构造函数循环依赖）。
+	plotService.SetWaitlistHooks(waitlistService, waitlistService)
 	auditService := service.NewAuditService(auditRepo, logger)
 	planService := service.NewPlantingPlanService(planRepo, plotRepo, plotService, db, logger)
 	harvestService := service.NewHarvestRecordService(harvestRepo, planRepo, db, logger)
@@ -76,6 +80,7 @@ func main() {
 	authHandler := handler.NewAuthHandler(authService)
 	userHandler := handler.NewUserHandler(userService, auditService)
 	plotHandler := handler.NewPlotHandler(plotService, auditService)
+	waitlistHandler := handler.NewWaitlistHandler(waitlistService, auditService)
 	planHandler := handler.NewPlantingPlanHandler(planService, harvestService)
 	harvestHandler := handler.NewHarvestHandler(harvestService, auditService)
 	diaryHandler := handler.NewDiaryHandler(diaryService)
@@ -87,7 +92,7 @@ func main() {
 
 	appRouter := router.New(
 		cfg, logger, rdb,
-		authHandler, userHandler, plotHandler, planHandler, harvestHandler,
+		authHandler, userHandler, plotHandler, waitlistHandler, planHandler, harvestHandler,
 		diaryHandler, communityHandler, auditHandler, statsHandler,
 		auditService, hub,
 	)

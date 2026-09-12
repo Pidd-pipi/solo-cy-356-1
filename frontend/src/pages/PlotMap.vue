@@ -39,13 +39,34 @@
       <el-table-column label="认养人" width="120">
         <template #default="{ row }">{{ row.adopter?.nickname || row.adopter?.username || '-' }}</template>
       </el-table-column>
+      <el-table-column label="候补认养" min-width="220">
+        <template #default="{ row }">
+          <WaitlistActions
+            :plot="row"
+            :status="waitStore.statusByPlot[row.id]"
+            :can-view-list="role === 'admin' || row.adopter_id === user?.id"
+            :logged-in="isLoggedIn"
+            @apply="onApply"
+            @cancel="onCancel"
+            @adopt="onInvitedAdopt"
+            @view-list="onViewList"
+          />
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="220">
         <template #default="{ row }">
-          <el-button v-if="row.status === 'available'" type="success" size="small" @click="adopt(row)">认养</el-button>
+          <el-button v-if="canAdopt(row)" type="success" size="small" @click="adopt(row)">认养</el-button>
           <el-button v-if="canRelease(row)" type="warning" size="small" @click="release(row)">释放</el-button>
         </template>
       </el-table-column>
     </DataTable>
+
+    <WaitlistDialog
+      v-model="listVisible"
+      :entries="waitStore.listByPlot[listPlotId] || []"
+      :loading="waitStore.loading"
+      :plot-name="listPlotName"
+    />
 
     <el-dialog v-model="createVisible" title="新增地块（管理员）" width="520px">
       <el-form :model="createForm" label-width="90px">
@@ -78,21 +99,30 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { usePlotStore } from '@/stores/plot'
+import { useWaitlistStore } from '@/stores/waitlist'
 import { createPlot, type Plot } from '@/api/plot'
 import { useAuth } from '@/hooks/useAuth'
 import { usePagination } from '@/hooks/usePagination'
 import DataTable from '@/components/DataTable.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
+import WaitlistActions from '@/components/WaitlistActions.vue'
+import WaitlistDialog from '@/components/WaitlistDialog.vue'
 import { PlotStatusMeta, SoilTypeText, SunlightText } from '@/constants'
 import { formatArea, clamp } from '@/utils/format'
 
 const store = usePlotStore()
+const waitStore = useWaitlistStore()
 const pagination = usePagination()
-const { user, role, isAdmin } = useAuth()
+const { user, role, isAdmin, isLoggedIn } = useAuth()
 
 const createVisible = ref(false)
 const creating = ref(false)
 const createForm = reactive({ name: '', code: '', area: 10, soil_type: 'loam', sunlight: 'full', latitude: 31.2304, longitude: 121.4737, description: '' })
+
+// 候补名单弹窗
+const listVisible = ref(false)
+const listPlotId = ref(0)
+const listPlotName = ref('')
 
 const mapW = 600
 const mapH = 360
@@ -117,10 +147,21 @@ function onPage(page: number) {
 
 async function fetch() {
   await store.fetchPlots({ page: pagination.page.value, page_size: pagination.size.value })
+  if (isLoggedIn.value) {
+    await waitStore.fetchBatchStatus(store.plots.map((p) => p.id))
+  }
 }
 
 function canRelease(row: Plot) {
   return row.status === 'harvested' && (role.value === 'admin' || row.adopter_id === user.value?.id)
+}
+
+// 空闲地块：未被受邀资格预占，或受邀人就是本人时，本人可直接发起认养
+function canAdopt(row: Plot) {
+  if (row.status !== 'available') return false
+  const wl = waitStore.statusByPlot[row.id]
+  if (!wl) return true
+  return !wl.reserved || wl.invited_to_me
 }
 
 async function adopt(row: Plot) {
@@ -131,18 +172,57 @@ async function adopt(row: Plot) {
   }
   await store.adopt(row.id)
   ElMessage.success('认养成功，开始你的都市农夫之旅')
+  await fetch()
+}
+
+async function onInvitedAdopt(plotId: number) {
+  const row = store.plots.find((p) => p.id === plotId)
+  await adopt(row as Plot)
 }
 
 async function release(row: Plot) {
   try {
-    await ElMessageBox.confirm(`确认释放地块 ${row.name} 吗？释放后将重新回到共享池。`, '释放确认', { type: 'warning' })
+    await ElMessageBox.confirm(`确认释放地块 ${row.name} 吗？释放后最早候补者将获得优先认养资格。`, '释放确认', { type: 'warning' })
   } catch {
     return
   }
   const { releasePlot } = await import('@/api/plot')
   await releasePlot(row.id)
-  ElMessage.success('地块已释放')
+  ElMessage.success('地块已释放，已通知最早候补者')
   await fetch()
+}
+
+async function onApply(plotId: number) {
+  try {
+    const { value } = await ElMessageBox.prompt(`申请候补认养该地块，释放后将按申请时间优先通知（可留备注）`, '申请候补', {
+      confirmButtonText: '提交申请',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+      inputValue: ''
+    })
+    await waitStore.apply(plotId, value || '')
+    ElMessage.success('候补申请已提交')
+  } catch (e: any) {
+    if (e === 'cancel') return
+  }
+}
+
+async function onCancel(plotId: number, entryId: number) {
+  try {
+    await ElMessageBox.confirm('确认取消该候补申请吗？取消后需要重新排队。', '取消候补', { type: 'warning' })
+  } catch {
+    return
+  }
+  await waitStore.cancel(plotId, entryId)
+  ElMessage.success('候补申请已取消')
+}
+
+async function onViewList(plotId: number) {
+  const row = store.plots.find((p) => p.id === plotId)
+  listPlotId.value = plotId
+  listPlotName.value = row ? `${row.name}（${row.code}）` : ''
+  listVisible.value = true
+  await waitStore.fetchPlotList(plotId)
 }
 
 function openCreate() {

@@ -30,6 +30,25 @@ const (
 	PlotStatusHarvested PlotStatus = "harvested" // 已收成待释放
 )
 
+// WaitlistStatus 候补认养申请状态机：
+// waiting（排队中） -> invited（已获优先认养资格） -> adopted（完成认养，终态）
+// waiting/invited -> cancelled（申请人取消，终态）
+// 受邀资格在受邀人认养或取消前一直有效；受邀人取消后立即顺延给下一位 waiting。
+type WaitlistStatus string
+
+const (
+	WaitlistWaiting   WaitlistStatus = "waiting"   // 候补排队中
+	WaitlistInvited   WaitlistStatus = "invited"   // 已获优先认养资格
+	WaitlistAdopted   WaitlistStatus = "adopted"   // 已完成认养（终态）
+	WaitlistCancelled WaitlistStatus = "cancelled" // 已取消（终态，可再次申请）
+)
+
+// WaitlistTerminalStatuses 候补申请终态集合。
+var WaitlistTerminalStatuses = []WaitlistStatus{WaitlistAdopted, WaitlistCancelled}
+
+// WaitlistActiveStatuses 有效申请状态集合（同一地块同一人仅允许一条）。
+var WaitlistActiveStatuses = []WaitlistStatus{WaitlistWaiting, WaitlistInvited}
+
 // SoilType 土壤类型
 type SoilType string
 

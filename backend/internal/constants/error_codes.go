@@ -22,6 +22,14 @@ const (
 	CodeDuplicateUsername    = 2007
 	CodeInvalidCredentials   = 2008
 	CodeUserDisabled         = 2009
+
+	// 候补认养业务错误码
+	CodeWaitlistNotAllowed      = 2010 // 地块状态不允许申请候补
+	CodeWaitlistDuplicate       = 2011 // 同一地块同一人已存在有效申请
+	CodeWaitlistNotFound        = 2012 // 候补申请不存在
+	CodeWaitlistStateNotAllowed = 2013 // 候补申请当前状态不允许该操作
+	CodeWaitlistNotInvited      = 2014 // 尚未获得优先认养资格
+	CodeWaitlistInviteMismatch  = 2015 // 优先认养资格不属于当前用户
 )
 
 // ErrorText 错误码默认文案（service/handler 可覆盖拼接更具体的 message）
@@ -44,4 +52,10 @@ var ErrorText = map[int]string{
 	CodeDuplicateUsername: "用户名已被占用",
 	CodeInvalidCredentials: "用户名或密码错误",
 	CodeUserDisabled:      "账号已被禁用",
+	CodeWaitlistNotAllowed:      "地块当前状态不允许申请候补",
+	CodeWaitlistDuplicate:       "你在该地块已有一条有效候补申请",
+	CodeWaitlistNotFound:        "候补申请不存在",
+	CodeWaitlistStateNotAllowed: "候补申请当前状态不允许该操作",
+	CodeWaitlistNotInvited:      "你尚未获得该地块的优先认养资格",
+	CodeWaitlistInviteMismatch:  "该地块当前优先认养资格不属于你",
 }

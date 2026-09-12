@@ -48,6 +48,22 @@ func PlotStatusText(s string) string {
 	}
 }
 
+// WaitlistStatusText 候补申请状态中文文本。
+func WaitlistStatusText(s string) string {
+	switch constants.WaitlistStatus(s) {
+	case constants.WaitlistWaiting:
+		return "候补中"
+	case constants.WaitlistInvited:
+		return "已获优先认养资格"
+	case constants.WaitlistAdopted:
+		return "已通过候补认养"
+	case constants.WaitlistCancelled:
+		return "已取消"
+	default:
+		return "未知状态"
+	}
+}
+
 // PlanStatusText 种植计划状态中文文本。
 func PlanStatusText(s string) string {
 	switch constants.PlanStatus(s) {

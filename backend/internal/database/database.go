@@ -21,6 +21,7 @@ import (
 var Models = []interface{}{
 	&model.User{},
 	&model.Plot{},
+	&model.WaitlistEntry{},
 	&model.PlantingPlan{},
 	&model.HarvestRecord{},
 	&model.DiaryEntry{},
@@ -28,6 +29,15 @@ var Models = []interface{}{
 	&model.CommunityPost{},
 	&model.CommunityComment{},
 	&model.AuditLog{},
+}
+
+// partialIndexDDL AutoMigrate 无法表达的部分唯一索引（PostgreSQL 与 SQLite 均支持 WHERE 子句）。
+const partialIndexDDL = `CREATE UNIQUE INDEX IF NOT EXISTS waitlist_active_uniq
+	ON waitlist_entries (plot_id, user_id) WHERE status IN ('waiting', 'invited')`
+
+// EnsurePartialIndexes 创建部分唯一索引（候补有效申请唯一约束兜底）。
+func EnsurePartialIndexes(db *gorm.DB) error {
+	return db.Exec(partialIndexDDL).Error
 }
 
 // Connect 建立 PostgreSQL 连接并完成迁移与种子数据。
@@ -47,6 +57,9 @@ func Connect(cfg *config.Config, logger *slog.Logger) (*gorm.DB, error) {
 	logger.Info(constants.LogDBConnected, "host", cfg.DBHost, "port", cfg.DBPort, "db", cfg.DBName)
 
 	if err := db.AutoMigrate(Models...); err != nil {
+		return nil, err
+	}
+	if err := EnsurePartialIndexes(db); err != nil {
 		return nil, err
 	}
 	logger.Info(constants.LogDBMigrateDone, "tables", len(Models))

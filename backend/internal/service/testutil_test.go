@@ -32,11 +32,15 @@ func newTestServiceDB(t *testing.T) *gorm.DB {
 		t.Fatalf("open test db: %v", err)
 	}
 	if err := db.AutoMigrate(
-		&model.User{}, &model.Plot{}, &model.PlantingPlan{}, &model.HarvestRecord{},
+		&model.User{}, &model.Plot{}, &model.WaitlistEntry{}, &model.PlantingPlan{}, &model.HarvestRecord{},
 		&model.DiaryEntry{}, &model.DiaryComment{}, &model.CommunityPost{}, &model.CommunityComment{},
 		&model.AuditLog{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
+	}
+	if err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS waitlist_active_uniq
+		ON waitlist_entries (plot_id, user_id) WHERE status IN ('waiting', 'invited')`).Error; err != nil {
+		t.Fatalf("create waitlist partial index: %v", err)
 	}
 	return db
 }

@@ -104,6 +104,21 @@ CREATE TABLE IF NOT EXISTS community_comments (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- 地块候补认养申请
+CREATE TABLE IF NOT EXISTS waitlist_entries (
+    id BIGSERIAL PRIMARY KEY,
+    plot_id BIGINT NOT NULL REFERENCES plots(id),
+    user_id BIGINT NOT NULL REFERENCES users(id),
+    -- waiting=候补排队中 invited=已获优先认养资格 adopted=已完成认养 cancelled=已取消
+    status VARCHAR(32) NOT NULL DEFAULT 'waiting',
+    invited_at TIMESTAMPTZ,
+    canceled_at TIMESTAMPTZ,
+    resolved_at TIMESTAMPTZ,
+    note VARCHAR(512),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS audit_logs (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT,
@@ -125,3 +140,9 @@ CREATE INDEX IF NOT EXISTS idx_harvest_user ON harvest_records(user_id);
 CREATE INDEX IF NOT EXISTS idx_diary_user ON diary_entries(user_id);
 CREATE INDEX IF NOT EXISTS idx_posts_type ON community_posts(post_type);
 CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(username);
+CREATE INDEX IF NOT EXISTS idx_waitlist_plot ON waitlist_entries(plot_id);
+CREATE INDEX IF NOT EXISTS idx_waitlist_user ON waitlist_entries(user_id);
+CREATE INDEX IF NOT EXISTS idx_waitlist_status ON waitlist_entries(status);
+-- 同一地块同一用户只保留一条有效申请（waiting / invited）
+CREATE UNIQUE INDEX IF NOT EXISTS waitlist_active_uniq
+    ON waitlist_entries (plot_id, user_id) WHERE status IN ('waiting', 'invited');

@@ -14,16 +14,39 @@ import (
 	"github.com/communitygarden/server/internal/util"
 )
 
+// InviteGranter 地块释放后邀请最早候补者（由 WaitlistService 实现，避免构造函数循环依赖）。
+type InviteGranter interface {
+	InviteEarliestWaitingWithTx(tx *gorm.DB, plotID uint) error
+}
+
+// InviteGuard 认养时校验/兑现优先认养资格（由 WaitlistService 实现）。
+type InviteGuard interface {
+	// GetInvitedEntry 返回地块当前受邀申请，无受邀资格时返回 nil。
+	GetInvitedEntry(tx *gorm.DB, plotID uint) (*model.WaitlistEntry, error)
+	// FulfillInviteWithTx 将受邀人的申请置为 adopted。
+	FulfillInviteWithTx(tx *gorm.DB, plotID, userID uint) error
+}
+
 // PlotService 地块服务（认养使用事务 + SELECT FOR UPDATE）。
 type PlotService struct {
 	plotRepo repository.PlotRepository
 	db       *gorm.DB
 	logger   *slog.Logger
+
+	// 候补认养钩子（main.go 装配时注入；未注入时走原有认养/释放流程）。
+	inviteGranter InviteGranter
+	inviteGuard   InviteGuard
 }
 
 // NewPlotService 构造地块服务。
 func NewPlotService(plotRepo repository.PlotRepository, db *gorm.DB, logger *slog.Logger) *PlotService {
 	return &PlotService{plotRepo: plotRepo, db: db, logger: logger}
+}
+
+// SetWaitlistHooks 注入候补认养服务钩子（避免构造函数循环依赖）。
+func (s *PlotService) SetWaitlistHooks(granter InviteGranter, guard InviteGuard) {
+	s.inviteGranter = granter
+	s.inviteGuard = guard
 }
 
 // GetByID 查询地块详情（被地块 handler 与种植计划 service 复用）。
@@ -123,10 +146,27 @@ func (s *PlotService) Adopt(plotID, userID uint, role, username string) (*model.
 		if plot.Status != string(constants.PlotStatusAvailable) {
 			return util.NewAppError(constants.CodePlotNotAvailable, 409, fmt.Sprintf("地块 %s 当前状态为 %s，不可认养", plot.Code, util.PlotStatusText(plot.Status)))
 		}
+		// 候补优先认养：地块释放后已邀请最早候补者时，仅受邀本人可认养，
+		// 该资格在受邀人认养或取消前一直有效。
+		if s.inviteGuard != nil {
+			invited, err := s.inviteGuard.GetInvitedEntry(tx, plotID)
+			if err != nil {
+				return err
+			}
+			if invited != nil && invited.UserID != userID {
+				return util.NewAppError(constants.CodeWaitlistInviteMismatch, 409,
+					fmt.Sprintf("地块 %s 的优先认养资格属于候补用户 %d，请等待其认养或取消", plot.Code, invited.UserID))
+			}
+		}
 		plot.Status = string(constants.PlotStatusAdopted)
 		plot.AdopterID = &userID
 		if err := s.plotRepo.UpdateWithTx(tx, plot); err != nil {
 			return util.NewAppError(constants.CodeInternalError, 500, constants.ErrorText[constants.CodeInternalError]).Wrap(err)
+		}
+		if s.inviteGuard != nil {
+			if err := s.inviteGuard.FulfillInviteWithTx(tx, plotID, userID); err != nil {
+				return err
+			}
 		}
 		adopted = plot
 		return nil
@@ -159,6 +199,12 @@ func (s *PlotService) Release(plotID, operatorID uint, operatorRole string) (*mo
 		plot.AdopterID = nil
 		if err := s.plotRepo.UpdateWithTx(tx, plot); err != nil {
 			return util.NewAppError(constants.CodeInternalError, 500, constants.ErrorText[constants.CodeInternalError]).Wrap(err)
+		}
+		// 地块释放：最早候补申请者获得优先认养资格（在其认养或取消前一直有效）。
+		if s.inviteGranter != nil {
+			if err := s.inviteGranter.InviteEarliestWaitingWithTx(tx, plotID); err != nil {
+				return err
+			}
 		}
 		released = plot
 		return nil

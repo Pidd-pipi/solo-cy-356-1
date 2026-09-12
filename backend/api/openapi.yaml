@@ -8,6 +8,7 @@ servers:
 tags:
   - name: auth
   - name: plots
+  - name: waitlist
   - name: planting-plans
   - name: harvests
   - name: diaries
@@ -52,8 +53,52 @@ paths:
   /plots/{id}/release:
     post:
       tags: [plots]
-      summary: 释放地块
+      summary: 释放地块（最早候补者获得优先认养资格）
       responses: { '200': { description: 成功 } }
+  /plots/{id}/waitlist:
+    get:
+      tags: [waitlist]
+      summary: 候补名单（按申请时间排序，仅管理员/认养人）
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: 成功 }, '403': { description: 越权查看 } }
+    post:
+      tags: [waitlist]
+      summary: 申请候补（地块已被认养；同一地块同一人仅保留一条有效申请）
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses:
+        '200': { description: 成功 }
+        '409': { description: 重复申请（2011）/ 地块状态不允许候补（2010） }
+  /plots/{id}/waitlist/summary:
+    get:
+      tags: [waitlist]
+      summary: 候补人数与当前用户申请状态
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: 成功 } }
+  /waitlist/mine:
+    get:
+      tags: [waitlist]
+      summary: 我的候补申请（分页）
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, default: 10 } }
+        - { name: status, in: query, schema: { type: string, enum: [waiting, invited, adopted, cancelled] } }
+      responses: { '200': { description: 成功 } }
+  /waitlist/status:
+    get:
+      tags: [waitlist]
+      summary: 批量查询地块候补人数与我的申请状态
+      parameters:
+        - { name: plot_ids, in: query, required: true, schema: { type: string }, description: 逗号分隔的地块 ID }
+      responses: { '200': { description: 成功 } }
+  /waitlist/{id}:
+    delete:
+      tags: [waitlist]
+      summary: 取消自己的候补申请（受邀取消后资格顺延下一位）
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses:
+        '200': { description: 成功 }
+        '403': { description: 越权取消 }
+        '409': { description: 无效状态操作（2013） }
   /planting-plans:
     get:
       tags: [planting-plans]
